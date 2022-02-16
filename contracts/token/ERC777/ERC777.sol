@@ -31,20 +31,32 @@ contract ERC777 is Context, IERC777, IERC20 {
 
     IERC1820Registry internal constant _ERC1820_REGISTRY = IERC1820Registry(0x1820a4B7618BdE71Dce8cdc73aAB6C95905faD24);
 
+    /// # #if_updated {:msg "balances must be zero or higher"}
+    /// # forall(address addr in _balances) _balances[addr] >= 0;
+    /// XXX: Disabled because scribble fails to process this annotation.
     mapping(address => uint256) private _balances;
 
+    /// #if_updated {:msg "total supply must be non-negative"}
+    /// _totalSupply >= 0;
+    /// #if_updated {:msg "total supply must be equal to the sum of the balances"}
+    /// _totalSupply == unchecked_sum(_balances);
     uint256 private _totalSupply;
 
+    /// #if_updated {:msg "the name is a constant"} false;
     string private _name;
+    /// #if_updated {:msg "the symbol is a constant"} false;
     string private _symbol;
 
     bytes32 private constant _TOKENS_SENDER_INTERFACE_HASH = keccak256("ERC777TokensSender");
     bytes32 private constant _TOKENS_RECIPIENT_INTERFACE_HASH = keccak256("ERC777TokensRecipient");
 
     // This isn't ever read from - it's only used to respond to the defaultOperators query.
+    /// #if_updated {:msg "the default operators must be immutable"} false;
     address[] private _defaultOperatorsArray;
 
     // Immutable, but accounts may revoke them (tracked in __revokedDefaultOperators).
+    /// #if_updated {:msg "the default operators must be immutable"}
+    /// msg.sig == bytes4(0x0);
     mapping(address => bool) private _defaultOperators;
 
     // For each account, a mapping of its operators and revoked default operators.
@@ -104,6 +116,7 @@ contract ERC777 is Context, IERC777, IERC20 {
      *
      * This implementation always returns `1`.
      */
+    /// #if_succeeds {:msg "the granularity must be at least 1"} $result >= 1;
     function granularity() public view virtual override returns (uint256) {
         return 1;
     }
@@ -118,6 +131,7 @@ contract ERC777 is Context, IERC777, IERC20 {
     /**
      * @dev Returns the amount of tokens owned by an account (`tokenHolder`).
      */
+    /// #if_succeeds {:msg "the balance must be zero or higher"} $result >= 0;
     function balanceOf(address tokenHolder) public view virtual override(IERC20, IERC777) returns (uint256) {
         return _balances[tokenHolder];
     }
@@ -170,6 +184,10 @@ contract ERC777 is Context, IERC777, IERC20 {
     /**
      * @dev See {IERC777-authorizeOperator}.
      */
+    /// #if_succeeds {:msg "the holder must not be an operator for itself"}
+    /// msg.sender != operator;
+    /// #if_succeeds {:msg "the operator must be an operator for the holder"}
+    /// isOperatorFor(operator, msg.sender);
     function authorizeOperator(address operator) public virtual override {
         require(_msgSender() != operator, "ERC777: authorizing self as operator");
 
@@ -185,6 +203,10 @@ contract ERC777 is Context, IERC777, IERC20 {
     /**
      * @dev See {IERC777-revokeOperator}.
      */
+    /// #if_succeeds {:msg "the holder must not be an operator for itself"}
+    /// msg.sender != operator;
+    /// #if_succeeds {:msg "the operator must not be an operator for the holder"}
+    /// !isOperatorFor(operator, msg.sender);
     function revokeOperator(address operator) public virtual override {
         require(operator != _msgSender(), "ERC777: revoking self as operator");
 
@@ -209,6 +231,8 @@ contract ERC777 is Context, IERC777, IERC20 {
      *
      * Emits {Sent} and {IERC20-Transfer} events.
      */
+    /// #if_succeeds {:msg "the operator must be authorized"}
+    /// isOperatorFor(msg.sender, sender);
     function operatorSend(
         address sender,
         address recipient,
@@ -225,6 +249,8 @@ contract ERC777 is Context, IERC777, IERC20 {
      *
      * Emits {Burned} and {IERC20-Transfer} events.
      */
+    /// #if_succeeds {:msg "the operator must be authorized"}
+    /// isOperatorFor(msg.sender, account);
     function operatorBurn(
         address account,
         uint256 amount,
@@ -327,6 +353,24 @@ contract ERC777 is Context, IERC777, IERC20 {
      * - if `account` is a contract, it must implement the {IERC777Recipient}
      * interface.
      */
+    /// #if_succeeds {:msg "the recipient must not be 0x0"}
+    /// account != address(0x0);
+    /// #if_succeeds {:msg "the recipient balance must be non-negative"}
+    /// balanceOf(account) >= 0;
+    /// #if_succeeds {:msg "the recipient balance must be increased"}
+    /// old(balanceOf(account) + amount) == balanceOf(account);
+    /// #if_succeeds {:msg "the recipient balance must be a multiple of granularity"}
+    /// balanceOf(account) % granularity() == 0;
+    /// #if_succeeds {:msg "the data must be immutable"}
+    /// old(keccak256(userData)) == keccak256(userData);
+    /// #if_succeeds {:msg "the operator data must be immutable"}
+    /// old(keccak256(operatorData)) == keccak256(operatorData);
+    /// #if_succeeds {:msg "the sum of the balances must not change"}
+    /// old(unchecked_sum(_balances)) == unchecked_sum(_balances);
+    /// #if_succeeds {:msg "the total supply must be increased"}
+    /// old(_totalSupply) == _totalSupply + amount;
+    /// #if_succeeds {:msg "the balance of 0x0 must not change"}
+    /// old(balanceOf(address(0x0))) == balanceOf(address(0x0));
     function _mint(
         address account,
         uint256 amount,
@@ -359,6 +403,30 @@ contract ERC777 is Context, IERC777, IERC20 {
      * @param operatorData bytes extra information provided by the operator (if any)
      * @param requireReceptionAck if true, contract recipients are required to implement ERC777TokensRecipient
      */
+    /// #if_succeeds {:msg "the holder must not be 0x0"}
+    /// from != address(0x0);
+    /// #if_succeeds {:msg "the recipient must not be 0x0"}
+    /// to != address(0x0);
+    /// #if_succeeds {:msg "the holder balance must be non-negative"}
+    /// balanceOf(from) >= 0;
+    /// #if_succeeds {:msg "the receiver balance must be non-negative"}
+    /// balanceOf(to) >= 0;
+    /// #if_succeeds {:msg "the holder balance must be decreased"}
+    /// old(balanceOf(from) - amount) == balanceOf(from);
+    /// #if_succeeds {:msg "the receiver balance must be increased"}
+    /// old(balanceOf(to) + amount) == balanceOf(to);
+    /// #if_succeeds {:msg "the holder balance must be a multiple of granularity"}
+    /// balanceOf(from) % granularity() == 0;
+    /// #if_succeeds {:msg "the receiver balance must be a multiple of granularity"}
+    /// balanceOf(to) % granularity() == 0;
+    /// #if_succeeds {:msg "the data must be immutable"}
+    /// old(keccak256(userData)) == keccak256(userData);
+    /// #if_succeeds {:msg "the operator data must be immutable"}
+    /// old(keccak256(operatorData)) == keccak256(operatorData);
+    /// #if_succeeds {:msg "the sum of the balances must not change"}
+    /// old(unchecked_sum(_balances)) == unchecked_sum(_balances);
+    /// #if_succeeds {:msg "the total supply must not change"}
+    /// old(_totalSupply) == _totalSupply;
     function _send(
         address from,
         address to,
@@ -386,6 +454,24 @@ contract ERC777 is Context, IERC777, IERC20 {
      * @param data bytes extra information provided by the token holder
      * @param operatorData bytes extra information provided by the operator (if any)
      */
+    /// #if_succeeds {:msg "the holder must not be 0x0"}
+    /// from != address(0x0);
+    /// #if_succeeds {:msg "the holder balance must be non-negative"}
+    /// balanceOf(from) >= 0;
+    /// #if_succeeds {:msg "the holder balance must be decreased"}
+    /// old(balanceOf(from) - amount) == balanceOf(from);
+    /// #if_succeeds {:msg "the holder balance must be a multiple of granularity"}
+    /// balanceOf(from) % granularity() == 0;
+    /// #if_succeeds {:msg "the data must be immutable"}
+    /// old(keccak256(data)) == keccak256(data);
+    /// #if_succeeds {:msg "the operator data must be immutable"}
+    /// old(keccak256(operatorData)) == keccak256(operatorData);
+    /// #if_succeeds {:msg "the sum of the balances must not change"}
+    /// old(unchecked_sum(_balances)) == unchecked_sum(_balances);
+    /// #if_succeeds {:msg "the total supply must be decreased"}
+    /// old(_totalSupply) == _totalSupply - amount;
+    /// #if_succeeds {:msg "the balance of 0x0 must not change"}
+    /// old(balanceOf(address(0x0))) == balanceOf(address(0x0));
     function _burn(
         address from,
         uint256 amount,
@@ -459,6 +545,9 @@ contract ERC777 is Context, IERC777, IERC20 {
      * @param userData bytes extra information provided by the token holder (if any)
      * @param operatorData bytes extra information provided by the operator (if any)
      */
+    /// #if_succeeds {:msg "tokensToSend must be called before the state is updated"}
+    /// old(balanceOf(from)) == balanceOf(from) &&
+    /// old(balanceOf(to)) == balanceOf(to);
     function _callTokensToSend(
         address operator,
         address from,
@@ -484,6 +573,9 @@ contract ERC777 is Context, IERC777, IERC20 {
      * @param operatorData bytes extra information provided by the operator (if any)
      * @param requireReceptionAck if true, contract recipients are required to implement ERC777TokensRecipient
      */
+    /// #if_succeeds {:msg "tokensReceived must be called after the state is updated"}
+    /// old(balanceOf(from)) >= balanceOf(from) &&
+    /// old(balanceOf(to)) <= balanceOf(to);
     function _callTokensReceived(
         address operator,
         address from,
